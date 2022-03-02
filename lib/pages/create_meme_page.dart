@@ -160,7 +160,7 @@ class _CreateMemePageContentState extends State<CreateMemePageContent> {
           Expanded(
             flex: 1,
             child: Container(
-              color: AppColors.white,
+              color: AppColors.fuchsia,
               child: ListView(
                 children: [
                   const SizedBox(height: 12),
