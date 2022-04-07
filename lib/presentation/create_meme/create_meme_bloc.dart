@@ -1,3 +1,5 @@
+import 'package:memogenerator/presentation/create_meme/models/meme_text.dart';
+import 'package:memogenerator/presentation/create_meme/models/meme_text_with_selection.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
@@ -94,54 +96,4 @@ class CreateMemeBloc {
   }
 }
 
-class MemeTextWithSelection {
-  final MemeText memeText;
-  final bool selected;
 
-  MemeTextWithSelection({
-    required this.memeText,
-    required this.selected,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is MemeTextWithSelection &&
-          runtimeType == other.runtimeType &&
-          memeText == other.memeText &&
-          selected == other.selected;
-
-  @override
-  int get hashCode => memeText.hashCode ^ selected.hashCode;
-}
-
-class MemeText {
-  final String id;
-  final String text;
-
-  MemeText({required this.id, required this.text});
-
-  factory MemeText.create() {
-    return MemeText(id: Uuid().v4(), text: '');
-  }
-
-  @override
-
-  /// добавляем hashCode -> cd+N
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is MemeText &&
-          runtimeType == other.runtimeType &&
-          id == other.id &&
-          text == other.text;
-
-  @override
-  int get hashCode => id.hashCode ^ text.hashCode;
-
-  @override
-
-  /// добавляем toString() -> cd+N
-  String toString() {
-    return 'MemeText{id: $id, text: $text}';
-  }
-}
