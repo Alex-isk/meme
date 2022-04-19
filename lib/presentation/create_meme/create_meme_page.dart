@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:memogenerator/presentation/create_meme/create_meme_bloc.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text.dart';
+import 'package:memogenerator/presentation/create_meme/models/meme_text_with_offset.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_with_selection.dart';
 import 'package:memogenerator/presentation/main/main_bloc.dart';
 import 'package:memogenerator/resources/app_colors.dart';
@@ -9,6 +12,18 @@ import 'package:http/http.dart' as http;
 import 'package:google_fonts/google_fonts.dart';
 
 class CreateMemePage extends StatefulWidget {
+  final String? id;
+
+  ///
+  final String? selectedMemePath;
+
+  /// ImagePicker   (main_bloc.dart   main_page.dart    create_meme_page.dart    create_meme_bloc.dart)
+
+  const CreateMemePage({Key? key, this.id, this.selectedMemePath})
+      : super(key: key);
+
+  ///
+
   @override
   _CreateMemePageState createState() => _CreateMemePageState();
 }
@@ -18,7 +33,12 @@ class _CreateMemePageState extends State<CreateMemePage> {
   @override
   void initState() {
     super.initState();
-    bloc = CreateMemeBloc();
+    bloc = CreateMemeBloc(
+      id: widget.id,
+      selectedMemePath: widget.selectedMemePath,
+
+      /// ImagePicker
+    );
   }
 
   @override
@@ -41,6 +61,17 @@ class _CreateMemePageState extends State<CreateMemePage> {
           bottom: EditTextBar(),
 
           /// 1 нужен PreferredSizeWidget
+          actions: [
+            GestureDetector(
+              onTap: () => bloc.saveMeme(),
+              child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Icon(
+                    Icons.save,
+                    color: AppColors.darkGrey,
+                  )),
+            )
+          ],
         ),
         backgroundColor: AppColors.white,
         body: SafeArea(
@@ -371,41 +402,53 @@ class MemeCanvasWidget extends StatelessWidget {
 
           /// ДЗ-2 сбрасывать текст в TextField при нажатии на область белого квадрата - вне текста
           /// оборачиваем белый квадрат -контаинер GestureDetector с bloc.deselectMemeText()
-          child: Container(
-            color: AppColors.white,
-            child: StreamBuilder<List<MemeText>>(
+          child: Stack(
+            children: [
+              /// ImagePicker - StreamBuilder ...
+              StreamBuilder<String?>(
+                  stream: bloc.observeMemePath(),
+                  builder: (context, snapshot) {
+                    final path = snapshot.hasData ? snapshot.data : null;
+                    if (path == null) {
+                      return Container(color: AppColors.white);
+                    }
+                    return Image.file(File(path));
+                  }),
+              StreamBuilder<List<MemeTextWithOffset>>(
 
-                /// 1В - оборачиваем Column() StreamBuilder
-                initialData: const <MemeText>[],
+                  /// 1В - оборачиваем Column() StreamBuilder
+                  initialData: const <MemeTextWithOffset>[],
 
-                /// 4В пустой список
-                stream: bloc.observeMemeText(),
+                  /// 4В пустой список
+                  stream: bloc.observeMemeTextWithOffsets(),
 
-                /// 3В - вставляем прописанный блок
-                builder: (context, snapshot) {
-                  final memeText =
-                      snapshot.hasData ? snapshot.data! : const <MemeText>[];
+                  /// 3В - вставляем прописанный блок
+                  builder: (context, snapshot) {
+                    final memeTextWithOffset = snapshot.hasData
+                        ? snapshot.data!
+                        : const <MemeTextWithOffset>[];
 
-                  /// если в списке memeText есть данные - мы их получаем snapshot.hasData
-                  /// иначе - если ничего нет - возвращаем пустой список <MemeText>[]
-                  return LayoutBuilder(
+                    /// если в списке memeText есть данные - мы их получаем snapshot.hasData
+                    /// иначе - если ничего нет - возвращаем пустой список <MemeText>[]
+                    return LayoutBuilder(
 
-                      ///
+                        ///
 
-                      builder: (context, constraints) {
-                    return Stack(
-                      children: memeText.map((memeText) {
-                        return DraggableMemeText(
-                          memeText: memeText,
-                          parentConstraints: constraints,
-                        );
-                      }).toList(),
+                        builder: (context, constraints) {
+                      return Stack(
+                        children: memeTextWithOffset.map((memeTextWithOffset) {
+                          return DraggableMemeText(
+                            memeTextWithOffset: memeTextWithOffset,
+                            parentConstraints: constraints,
+                          );
+                        }).toList(),
 
-                      /// 5В - memeText. мапим - превращаем из объекта memeText - объект виджет Техт
-                      /// где в качестве текста memeText.text  и приводим к листу toList(),
-                    );
-                  });
-                }),
+                        /// 5В - memeText. мапим - превращаем из объекта memeText - объект виджет Техт
+                        /// где в качестве текста memeText.text  и приводим к листу toList(),
+                      );
+                    });
+                  }),
+            ],
           ),
         ),
       ),
@@ -414,15 +457,14 @@ class MemeCanvasWidget extends StatelessWidget {
 }
 
 class DraggableMemeText extends StatefulWidget {
-  final MemeText memeText;
+  final MemeTextWithOffset memeTextWithOffset;
   final BoxConstraints parentConstraints;
 
   /// ограничить рамки - чтобы текст не выходил - для LayoutBulder
 
-
   const DraggableMemeText({
     Key? key,
-    required this.memeText,
+    required this.memeTextWithOffset,
     required this.parentConstraints,
   }) : super(key: key);
 
@@ -431,20 +473,21 @@ class DraggableMemeText extends StatefulWidget {
 }
 
 class _DraggableMemeTextState extends State<DraggableMemeText> {
- late double top ;
- late double left;
+  late double top;
+  late double left;
   // double top = 0;    убираем нуль
   // double left = 0;
   final double padding = 8;
-/// ДЗ-7
+
+  /// ДЗ-7
   @override
   void initState() {
-    top = widget.parentConstraints.maxHeight / 2;
-    left = widget.parentConstraints.maxWidth / 3;
-
     super.initState();
+    top = widget.memeTextWithOffset.offset?.dy ??
+        widget.parentConstraints.maxHeight / 2;
+    left = widget.memeTextWithOffset.offset?.dx ??
+        widget.parentConstraints.maxWidth / 3;
   }
-
 
   /// переменные для позиционирования
   @override
@@ -459,12 +502,12 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
         behavior: HitTestBehavior.opaque,
 
         ///  с учетом паддингов можно перетаскивать слово, даже если нет цвета в контейнере
-        onTap: () => bloc.selectMemeText(widget.memeText.id),
+        onTap: () => bloc.selectMemeText(widget.memeTextWithOffset.id),
         onPanUpdate: (details) {
           /// местоположение текста
           /// ДЗ-1. Делать активным тот текст, который мы перетаскиваем по экрану
           ///     1. Выделять тот текст, который начали тащить (делать драг) по экрану
-          bloc.selectMemeText(widget.memeText.id);
+          bloc.selectMemeText(widget.memeTextWithOffset.id);
 
           /// ДЗ-1 выделение  и делать активным в textField текста при перетаскивании (драг)
           /// onPanUpdate: - отвечает за изменение местаположения текста + добавляем блок-выделеный текст с id
@@ -475,6 +518,8 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
             top = calculateTop(details);
 
             /// передвигать текст по экрану
+            bloc.changeMemeTextOffset(
+                widget.memeTextWithOffset.id, Offset(left, top));
           });
         },
 
@@ -497,37 +542,57 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
           /// ДЗ-3-2 подписываемся на выделенный текст
           builder: (BuildContext context, AsyncSnapshot<MemeText?> snapshot) {
             final selectedItem = snapshot.hasData ? snapshot.data : null;
-            final selected = widget.memeText.id == selectedItem?.id;
+            final selected = widget.memeTextWithOffset.id == selectedItem?.id;
             // if (snapshot.hasData) {
             // //  if (snapshot.hasData ? snapshot.data : null) {
             /// ДЗ-3-3 если есть данные, то возвращаем  Container с цветом16% + граница fuchsia
-            return Container(
-              constraints: BoxConstraints(
-                maxWidth: widget.parentConstraints.maxWidth,
-
-                ///ограничить размер вводимого текста + ограничить размер контейнера см выше <Size>
-                maxHeight: widget.parentConstraints.maxHeight,
-              ),
-              padding: EdgeInsets.all(padding),
-              decoration: BoxDecoration(
-                color: selected ? AppColors.darkGrey16 : null,
-                border: Border.all(
-                    color: selected ? AppColors.fuchsia : Colors.transparent,
-                    width: 1),
-              ),
-
-              /// alt+cmdV -  вынос параметров
-              child: Text(
-                widget.memeText.text,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.black,
-                  fontSize: 24,
-                ),
-              ),
+            return MemeTextOnCanvas(
+              padding: padding,
+              selected: selected,
+              parentConstraints: widget.parentConstraints,
+              text: widget.memeTextWithOffset.text,
             );
           },
         ),
+
+        // child: StreamBuilder<MemeText?>(
+        //   /// ДЗ-3-1  оборачиваем Container StreamBuilder
+        //   stream: bloc.observeSelectedMemeText(),
+        //
+        //   /// ДЗ-3-2 подписываемся на выделенный текст
+        //   builder: (BuildContext context, AsyncSnapshot<MemeText?> snapshot) {
+        //     final selectedItem = snapshot.hasData ? snapshot.data : null;
+        //     final selected = widget.memeTextWithOffset.id == selectedItem?.id;
+        //     // if (snapshot.hasData) {
+        //     // //  if (snapshot.hasData ? snapshot.data : null) {
+        //     /// ДЗ-3-3 если есть данные, то возвращаем  Container с цветом16% + граница fuchsia
+        //     return Container(
+        //       constraints: BoxConstraints(
+        //         maxWidth: widget.parentConstraints.maxWidth,
+        //
+        //         ///ограничить размер вводимого текста + ограничить размер контейнера см выше <Size>
+        //         maxHeight: widget.parentConstraints.maxHeight,
+        //       ),
+        //       padding: EdgeInsets.all(padding),
+        //       decoration: BoxDecoration(
+        //         color: selected ? AppColors.darkGrey16 : null,
+        //         border: Border.all(
+        //             color: selected ? AppColors.fuchsia : Colors.transparent,
+        //             width: 1),
+        //       ),
+        //
+        //       /// alt+cmdV -  вынос параметров
+        //       child: Text(
+        //         widget.memeTextWithOffset.text,
+        //         textAlign: TextAlign.center,
+        //         style: TextStyle(
+        //           color: AppColors.black,
+        //           fontSize: 24,
+        //         ),
+        //       ),
+        //     );
+        //   },
+        // ),
       ),
     );
   }
@@ -575,6 +640,45 @@ class _DraggableMemeTextState extends State<DraggableMemeText> {
       return widget.parentConstraints.maxWidth - padding * 2 - 10;
     }
     return rawLeft;
+  }
+}
+
+class MemeTextOnCanvas extends StatelessWidget {
+  final double padding;
+  final bool selected;
+  final BoxConstraints parentConstraints;
+  final String text;
+
+  const MemeTextOnCanvas({
+    Key? key,
+    required this.padding,
+    required this.selected,
+    required this.parentConstraints,
+    required this.text,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: parentConstraints.maxWidth,
+        maxHeight: parentConstraints.maxHeight,
+      ),
+      padding: EdgeInsets.all(padding),
+      decoration: BoxDecoration(
+        color: selected ? AppColors.darkGrey16 : null,
+        border: Border.all(
+            color: selected ? AppColors.fuchsia : Colors.transparent, width: 1),
+      ),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: AppColors.black,
+          fontSize: 24,
+        ),
+      ),
+    );
   }
 }
 
