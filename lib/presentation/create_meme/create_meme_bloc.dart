@@ -6,6 +6,7 @@ import 'package:memogenerator/data/models/meme.dart';
 import 'package:memogenerator/data/models/position.dart';
 import 'package:memogenerator/data/models/text_with_position.dart';
 import 'package:memogenerator/data/repositories/memes_repository.dart';
+import 'package:memogenerator/domain/interactors/save_meme_interactor.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_offset.dart';
 import 'package:memogenerator/presentation/create_meme/models/meme_text_with_offset.dart';
@@ -107,7 +108,7 @@ class CreateMemeBloc {
     final memeText = memeTextSubject.value;
     final memeTextOffsets = memeTextOffsetsSubject.value;
 
-    final textWithPosition = memeText.map((memeText) {
+    final textsWithPositions = memeText.map((memeText) {
       final memeTextPosition =
           memeTextOffsets.firstWhereOrNull((memeTextOffset) {
         return memeTextOffset.id == memeText.id;
@@ -119,10 +120,15 @@ class CreateMemeBloc {
           id: memeText.id, text: memeText.text, position: position);
     }).toList();
 
-
     /// ImagePicker memePath: memePathSubject.value,
-    saveMemeSubscription =
-        _saveMemeInternal(textWithPosition).asStream().listen(
+    saveMemeSubscription = SaveMemeInteractor.getInstance()
+        .saveMeme(
+          id: id,
+          textWithPosition: textsWithPositions,
+          imagePath: memePathSubject.value,
+        )
+        .asStream()
+        .listen(
       (saved) {
         print('Meme saved: $saved');
       },
@@ -131,38 +137,34 @@ class CreateMemeBloc {
     );
   }
 
+  // Future<bool> _saveMemeInternal(
+  //   final List<TextWithPosition> textWithPosition,
+  // ) async {
+  //   final imagePath = memePathSubject.value;
+  //   if (imagePath == null) {
+  //     final meme = Meme(id: id, texts: textWithPosition);
+  //     return MemesRepository.getInstance().addToMemes(meme);
+  //   }
+  //
+  //   {
+  //     final docsPath = await getApplicationDocumentsDirectory();
+  //     final memePath =
+  //         '${docsPath.absolute.path}${Platform.pathSeparator}memes';
+  //     await Directory(memePath).create(recursive: true);
+  //     final imageName = imagePath.split(Platform.pathSeparator).last;
+  //     final newImageName = '$memePath${Platform.pathSeparator}$imageName';
+  //     final tempFile = File(imagePath);
+  //     await tempFile.copy(newImageName);
+  //
+  //     final meme = Meme(
+  //       id: id,
+  //       texts: textWithPosition,
+  //       memePath: newImageName,
+  //     );
+  //     return MemesRepository.getInstance().addToMemes(meme);
+  //   }
+  // }
 
-  Future<bool> _saveMemeInternal(
-      final List<TextWithPosition> textWithPosition,
-      ) async {
-
-    final imagePath = memePathSubject.value;
-    if (imagePath == null) {
-      final meme = Meme(
-        id: id,
-        texts: textWithPosition
-      );
-      return MemesRepository.getInstance().addToMemes(meme);
-    }
-
-    {
-      final docsPath = await getApplicationDocumentsDirectory();
-      final memePath = '${docsPath.absolute.path}${Platform.pathSeparator}memes';
-      await Directory(memePath).create(recursive: true);
-      final imageName = imagePath.split(Platform.pathSeparator).last;
-      final newImageName = '$memePath${Platform.pathSeparator}$imageName';
-      final tempFile = File(imagePath);
-      await tempFile.copy(newImageName);
-
-    final meme = Meme(
-      id: id,
-      texts: textWithPosition,
-      memePath: newImageName,
-    );
-   return MemesRepository.getInstance().addToMemes(meme);
-  }
-
-    }
   void _subscribeToNewMemTextOffset() {
     newMemeTextOffsetSubscription = newMemeTextOffsetSubject
         .debounceTime(Duration(milliseconds: 300))
